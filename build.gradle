@@ -1,0 +1,94 @@
+// PostgreSQL to Solr Data Transfer Tool
+tasks.whenTaskAdded { task ->
+    ['startScripts', 'distTar'].each { String skipTaskName ->
+        if (task.name.contains(skipTaskName)) {
+            task.enabled = false
+        }
+    }
+}
+
+group 'rgd.mcw.edu'
+version ''
+
+apply plugin: 'java'
+apply plugin: 'application'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+mainClassName='edu.mcw.rgd.nlp.SimplePostgresToSolr'
+String appName='postgres-to-solr'
+
+project.archivesBaseName = appName
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // PostgreSQL database connectivity
+    implementation 'org.postgresql:postgresql:42.6.0'
+
+    // HTTP client for Solr
+    implementation 'org.apache.httpcomponents:httpclient:4.5.13'
+    implementation 'org.apache.httpcomponents:httpcore:4.4.15'
+    implementation 'org.apache.httpcomponents:httpmime:4.5.13'
+
+    // Solr client
+    implementation fileTree(dir: 'lib', include: '*.jar')
+
+    // Logging
+    implementation 'org.slf4j:slf4j-api:1.7.25'
+    implementation 'org.slf4j:slf4j-simple:1.7.25'
+
+    // Testing
+    testImplementation group: 'junit', name: 'junit', version: '4.11'
+}
+
+jar {
+    zip64=true
+    manifest {
+        attributes 'Built-By': System.getProperty('user.name'),
+                'Built-Date': new Date(),
+                'Built-JDK': System.getProperty('java.version'),
+        'Class-Path': configurations.runtimeClasspath.collect { it.getName() }.join(' '),
+        'Main-Class': mainClassName
+
+    }
+}
+
+distributions {
+    main {
+        distributionBaseName = appName
+    }
+}
+
+task createDistro(type: Copy) {
+    def zipFile = file('build/distributions/'+appName+'.zip')
+    def outputDir = file("build/install")
+
+    from zipTree(zipFile)
+    into outputDir
+}
+createDistro.dependsOn assembleDist
+
+// Custom task for single record updater
+task runSingleUpdater(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'edu.mcw.rgd.nlp.SingleRecordUpdater'
+    if (project.hasProperty('appArgs')) {
+        args project.appArgs.split(' ')
+    }
+}
+
+// Custom task for querying records
+task queryRecord(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'edu.mcw.rgd.nlp.QueryRecord'
+    if (project.hasProperty('appArgs')) {
+        args project.appArgs.split(' ')
+    }
+}
+

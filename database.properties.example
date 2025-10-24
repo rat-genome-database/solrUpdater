@@ -1,0 +1,18 @@
+# Database configuration for PostgreSQL to Solr transfer
+# Copy this file to src/main/resources/database.properties and configure for your environment
+
+# Database connection settings
+# For SSH tunnel, use localhost:5432
+# For direct connection, use your database host
+db.url=jdbc:postgresql://localhost:5432/rgdsolr
+db.username=your_username
+db.password=your_password
+
+# Connection pool settings (optional)
+db.maxConnections=10
+db.connectionTimeout=30000
+
+# Default Solr configuration
+solr.default.url=http://localhost:8983/solr/OntoMate
+solr.batch.size=100
+solr.chunk.size=10000
