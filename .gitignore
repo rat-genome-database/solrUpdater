@@ -1,0 +1,6 @@
+# Gradle
+.gradle/
+build/
+
+# Distribution files
+src/main/dist/
