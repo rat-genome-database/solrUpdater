@@ -179,7 +179,20 @@ public class SingleRecordUpdater {
             addFieldIfExists(doc, rs, "rgd_obj_pos");
             addFieldIfExists(doc, rs, "organism_pos");
 
-            // Note: *_count fields are not defined in Solr schema, skipping them
+            // Add count fields (required for QueryBuilder interface)
+            addFieldIfExists(doc, rs, "gene_count");
+            addFieldIfExists(doc, rs, "mp_count");
+            addFieldIfExists(doc, rs, "bp_count");
+            addFieldIfExists(doc, rs, "vt_count");
+            addFieldIfExists(doc, rs, "chebi_count");
+            addFieldIfExists(doc, rs, "rs_count");
+            addFieldIfExists(doc, rs, "rdo_count");
+            addFieldIfExists(doc, rs, "nbo_count");
+            addFieldIfExists(doc, rs, "xco_count");
+            addFieldIfExists(doc, rs, "so_count");
+            addFieldIfExists(doc, rs, "hp_count");
+            addFieldIfExists(doc, rs, "rgd_obj_count");
+            addFieldIfExists(doc, rs, "go_count");
 
             // Add source field
             doc.addField("p_source", "pubmed");
@@ -212,9 +225,24 @@ public class SingleRecordUpdater {
         try {
             String value = rs.getString(fieldName);
             if (value != null && !value.trim().isEmpty()) {
+                // Special handling for count fields - convert to integers
+                if (fieldName.endsWith("_count")) {
+                    String[] values = value.split(" \\| ");
+                    for (String val : values) {
+                        val = val.trim();
+                        if (!val.isEmpty()) {
+                            try {
+                                doc.addField(fieldName, Integer.parseInt(val));
+                            } catch (NumberFormatException e) {
+                                // Skip invalid numbers
+                                System.err.println("Warning: Invalid count value '" + val + "' for field " + fieldName);
+                            }
+                        }
+                    }
+                }
                 // Check if the field contains pipe-separated values
                 // These fields typically contain multiple values separated by " | "
-                if (fieldName.endsWith("_id") || fieldName.endsWith("_term") ||
+                else if (fieldName.endsWith("_id") || fieldName.endsWith("_term") ||
                     fieldName.endsWith("_pos") || fieldName.equals("gene")) {
                     // Split by pipe and add each value separately for multi-valued fields
                     String[] values = value.split(" \\| ");
