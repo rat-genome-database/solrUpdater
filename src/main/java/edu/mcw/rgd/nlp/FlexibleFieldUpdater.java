@@ -183,10 +183,13 @@ public class FlexibleFieldUpdater {
             if (limit != null) {
                 query += " LIMIT " + limit;
             }
+            System.out.println("Executing query for year " + year + "...");
 
             PreparedStatement ps = conn.prepareStatement(query);
             ps.setInt(1, Integer.parseInt(year));
             ResultSet rs = ps.executeQuery();
+
+            System.out.println("Query executed, processing records...");
 
             int count = 0;
             int errors = 0;
@@ -196,12 +199,22 @@ public class FlexibleFieldUpdater {
                 String pmid = rs.getString("pmid");
                 count++;
 
+                if (count == 1) {
+                    System.out.println("Starting to process first record...");
+                }
+
                 if (count % 100 == 0) {
                     System.out.println(sdf.format(new Date()) + " Processed " + count + " records for year " + year + "...");
                 }
 
                 try {
+                    if (count == 1) {
+                        System.out.println("Updating PMID: " + pmid);
+                    }
                     updateRecord(pmid, true);
+                    if (count == 1) {
+                        System.out.println("First record completed successfully");
+                    }
                 } catch (Exception e) {
                     errors++;
                     System.err.println("Error updating PMID " + pmid + ": " + e.getMessage());
