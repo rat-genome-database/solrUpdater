@@ -14,14 +14,10 @@
 #   ./updateFields.sh --all dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count --limit 1000
 
 # Get the directory where this script is located
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Check if compiled
-if [ ! -d "$DIR/build/classes/java/main" ]; then
-    echo "Classes not found, please build the project first with: ./gradlew build"
-    exit 1
-fi
+# Set up classpath with all jars in lib directory
+CLASSPATH="$SCRIPT_DIR/lib/*"
 
-# Use Gradle to run with proper classpath
-cd "$DIR"
-./gradlew -q runFlexibleUpdater -PappArgs="$*"
+# Run the FlexibleFieldUpdater class with proper classpath
+java -cp "$CLASSPATH" -Dconfig.file=/data/properties/database.properties edu.mcw.rgd.nlp.FlexibleFieldUpdater "$@"
