@@ -85,7 +85,9 @@ public class FlexibleFieldUpdater {
                         System.out.println("Successfully updated PMID " + pmid + " in Solr");
                     }
                 } else {
-                    System.err.println("No matching fields found to update for PMID: " + pmid);
+                    if (!quietMode) {
+                        System.err.println("No matching fields found to update for PMID: " + pmid);
+                    }
                 }
             } else {
                 System.err.println("PMID " + pmid + " not found in database");
@@ -472,7 +474,6 @@ public class FlexibleFieldUpdater {
                 }
 
                 if (!positions.isEmpty()) {
-                    System.out.println("DEBUG: Reconstructed gene_pos with " + positions.size() + " elements using gene_count");
                     doc.addField("gene_pos", atomicSetList(positions));
                 }
             } else {
@@ -530,15 +531,10 @@ public class FlexibleFieldUpdater {
         // </ns1:i>
         abstractText = abstractText.replaceAll(">\\s+", "> ").replaceAll("\\s+<", " <");
 
-        System.out.println("DEBUG: Title: '" + titleText + "'");
-        System.out.println("DEBUG: Abstract (after normalizing) starts with: '" + abstractText.substring(0, Math.min(50, abstractText.length())) + "'");
-
         // Split genes by " | "
         String[] genes = geneValue.split(" \\| ");
         List<Object> genePositions = new ArrayList<>();
         List<Object> geneCounts = new ArrayList<>();
-
-        System.out.println("DEBUG: Calculating positions for " + genes.length + " genes in title and abstract");
 
         for (String gene : genes) {
             gene = gene.trim();
@@ -604,13 +600,11 @@ public class FlexibleFieldUpdater {
         // Add fields to document with atomic update syntax
         if (!genePositions.isEmpty()) {
             doc.addField("gene_pos", atomicSetList(genePositions));
-            System.out.println("DEBUG: Added gene_pos with " + genePositions.size() + " elements");
         }
 
         // Always update gene_count when calculating gene_pos
         if (!geneCounts.isEmpty()) {
             doc.addField("gene_count", atomicSetList(geneCounts));
-            System.out.println("DEBUG: Added gene_count with " + geneCounts.size() + " elements");
         }
     }
 
@@ -660,11 +654,6 @@ public class FlexibleFieldUpdater {
             String value = rs.getString(fieldName);
             List<Object> counts = new ArrayList<>();
 
-            // Debug output
-            if (fieldName.equals("gene_count")) {
-                System.out.println("DEBUG addCountFieldIfExists gene_count raw: '" + value + "'");
-            }
-
             if (value != null && !value.trim().isEmpty()) {
                 String[] values = value.split(" \\| ");
                 for (String val : values) {
@@ -698,25 +687,12 @@ public class FlexibleFieldUpdater {
         try {
             String value = rs.getString(fieldName);
             if (value != null && !value.trim().isEmpty()) {
-                // Debug output
-                if (fieldName.equals("gene_pos") || fieldName.equals("gene") || fieldName.equals("gene_count")) {
-                    System.out.println("DEBUG " + fieldName + " raw value from DB: '" + value + "'");
-                }
-
                 // Check if the field contains pipe-separated values
                 if (fieldName.endsWith("_id") || fieldName.endsWith("_term") ||
                     fieldName.endsWith("_pos") || fieldName.equals("gene")) {
                     // Split by pipe and add each value separately for multi-valued fields
                     List<Object> fieldValues = new ArrayList<>();
                     String[] values = value.split(" \\| ");
-
-                    // Debug output
-                    if (fieldName.equals("gene_pos") || fieldName.equals("gene") || fieldName.equals("gene_count")) {
-                        System.out.println("DEBUG " + fieldName + " after split - array length: " + values.length);
-                        for (int i = 0; i < values.length && i < 5; i++) {
-                            System.out.println("  [" + i + "]: '" + values[i] + "'");
-                        }
-                    }
 
                     for (String val : values) {
                         val = val.trim();
