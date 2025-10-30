@@ -589,11 +589,9 @@ public class FlexibleFieldUpdater {
             if (positions.isEmpty()) {
                 genePositions.add("0;0-0");
                 geneCounts.add(0);
-                System.out.println("  Gene '" + gene + "': 0 occurrences found");
             } else {
                 genePositions.add(String.join("|", positions));
                 geneCounts.add(totalCount);
-                System.out.println("  Gene '" + gene + "': " + totalCount + " occurrences at " + String.join(", ", positions));
             }
         }
 
