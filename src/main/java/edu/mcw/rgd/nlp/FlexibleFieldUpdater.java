@@ -172,7 +172,7 @@ public class FlexibleFieldUpdater {
             }
 
             PreparedStatement ps = conn.prepareStatement(query);
-            ps.setString(1, year);
+            ps.setInt(1, Integer.parseInt(year));
             ResultSet rs = ps.executeQuery();
 
             int count = 0;
