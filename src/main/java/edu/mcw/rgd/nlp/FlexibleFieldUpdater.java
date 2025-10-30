@@ -43,11 +43,18 @@ public class FlexibleFieldUpdater {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd 'at' HH:mm:ss");
 
             // Create direct PostgreSQL connection
+            if (!quietMode) {
+                System.out.println("Connecting to database...");
+            }
+            DriverManager.setLoginTimeout(30); // 30 second timeout
             Connection conn = DriverManager.getConnection(
                 DatabaseConfig.getDbUrl(),
                 DatabaseConfig.getDbUsername(),
                 DatabaseConfig.getDbPassword()
             );
+            if (!quietMode) {
+                System.out.println("Database connection established");
+            }
 
             String query = "SELECT * FROM solr_docs WHERE pmid = ?";
 
@@ -103,11 +110,14 @@ public class FlexibleFieldUpdater {
         }
 
         try {
+            System.out.println("Connecting to database...");
+            DriverManager.setLoginTimeout(30); // 30 second timeout
             Connection conn = DriverManager.getConnection(
                 DatabaseConfig.getDbUrl(),
                 DatabaseConfig.getDbUsername(),
                 DatabaseConfig.getDbPassword()
             );
+            System.out.println("Database connection established");
 
             String query = "SELECT pmid FROM solr_docs ORDER BY pmid";
             if (limit != null) {
@@ -160,11 +170,14 @@ public class FlexibleFieldUpdater {
         }
 
         try {
+            System.out.println("Connecting to database...");
+            DriverManager.setLoginTimeout(30); // 30 second timeout
             Connection conn = DriverManager.getConnection(
                 DatabaseConfig.getDbUrl(),
                 DatabaseConfig.getDbUsername(),
                 DatabaseConfig.getDbPassword()
             );
+            System.out.println("Database connection established");
 
             String query = "SELECT pmid FROM solr_docs WHERE p_year = ? ORDER BY pmid";
             if (limit != null) {
