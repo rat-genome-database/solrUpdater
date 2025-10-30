@@ -119,12 +119,13 @@ public class FlexibleFieldUpdater {
             );
             System.out.println("Database connection established");
 
-            String query = "SELECT pmid FROM solr_docs ORDER BY pmid";
+            String query = "SELECT pmid FROM solr_docs";
             if (limit != null) {
                 query += " LIMIT " + limit;
             }
 
             Statement stmt = conn.createStatement();
+            stmt.setQueryTimeout(60); // 60 second timeout for query execution
             ResultSet rs = stmt.executeQuery(query);
 
             int count = 0;
@@ -179,13 +180,14 @@ public class FlexibleFieldUpdater {
             );
             System.out.println("Database connection established");
 
-            String query = "SELECT pmid FROM solr_docs WHERE p_year = ? ORDER BY pmid";
+            String query = "SELECT pmid FROM solr_docs WHERE p_year = ?";
             if (limit != null) {
                 query += " LIMIT " + limit;
             }
             System.out.println("Executing query for year " + year + "...");
 
             PreparedStatement ps = conn.prepareStatement(query);
+            ps.setQueryTimeout(60); // 60 second timeout for query execution
             ps.setInt(1, Integer.parseInt(year));
             ResultSet rs = ps.executeQuery();
 
