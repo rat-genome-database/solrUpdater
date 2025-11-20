@@ -43,7 +43,7 @@ public class SimplePostgresToSolr {
 
             String query;
             if (dateFilter != null && !dateFilter.isEmpty()) {
-                // Check if it's a date range (contains comma) or limit (starts with LIMIT)
+                // Check if it's a date range (contains comma), limit (starts with LIMIT), or updated_after filter
                 if (dateFilter.toUpperCase().startsWith("LIMIT")) {
                     // Parse the number from "LIMIT 100" format
                     String[] parts = dateFilter.split(" ");
@@ -53,6 +53,16 @@ public class SimplePostgresToSolr {
                         query = "SELECT * FROM solr_docs LIMIT 100";
                     }
                     System.out.println("Using custom limit: " + dateFilter);
+                } else if (dateFilter.toUpperCase().startsWith("UPDATED_AFTER")) {
+                    // Parse the date from "UPDATED_AFTER 2024-01-01" format
+                    String[] parts = dateFilter.split(" ");
+                    if (parts.length > 1) {
+                        String afterDate = parts[1];
+                        query = "SELECT * FROM solr_docs WHERE last_update_date > TIMESTAMP '" + afterDate + "'";
+                        System.out.println("Filtering by last_update_date after: " + afterDate);
+                    } else {
+                        throw new IllegalArgumentException("UPDATED_AFTER requires a date parameter (e.g., UPDATED_AFTER 2024-01-01)");
+                    }
                 } else if (dateFilter.contains(",")) {
                     // Date range format: "2016-10-01,2016-10-31"
                     String[] dates = dateFilter.split(",");
@@ -127,13 +137,16 @@ public class SimplePostgresToSolr {
             }
 
             if (rs.getString("title") != null) {
-                doc.addField("title", rs.getString("title"));
+                String title = sanitizeText(rs.getString("title"));
+                doc.addField("title", title);
             }
 
             // Handle abstract field (could be CLOB or TEXT)
             try {
                 String abstractText = rs.getString("abstract");
                 if (abstractText != null && !abstractText.trim().isEmpty()) {
+                    // Sanitize problematic characters that break Solr query parser
+                    abstractText = sanitizeText(abstractText);
                     doc.addField("abstract", abstractText);
                 }
             } catch (SQLException e) {
@@ -142,6 +155,8 @@ public class SimplePostgresToSolr {
                     Clob abstractClob = rs.getClob("abstract");
                     if (abstractClob != null) {
                         String abstractText = abstractClob.getSubString(1, (int) abstractClob.length());
+                        // Sanitize problematic characters that break Solr query parser
+                        abstractText = sanitizeText(abstractText);
                         doc.addField("abstract", abstractText);
                     }
                 } catch (SQLException e2) {
@@ -220,19 +235,25 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "organism_pos");
 
             // Add count fields (required for QueryBuilder interface)
-            addFieldIfExists(doc, rs, "gene_count");
-            addFieldIfExists(doc, rs, "mp_count");
-            addFieldIfExists(doc, rs, "bp_count");
-            addFieldIfExists(doc, rs, "vt_count");
-            addFieldIfExists(doc, rs, "chebi_count");
-            addFieldIfExists(doc, rs, "rs_count");
-            addFieldIfExists(doc, rs, "rdo_count");
-            addFieldIfExists(doc, rs, "nbo_count");
-            addFieldIfExists(doc, rs, "xco_count");
-            addFieldIfExists(doc, rs, "so_count");
-            addFieldIfExists(doc, rs, "hp_count");
-            addFieldIfExists(doc, rs, "rgd_obj_count");
-            addFieldIfExists(doc, rs, "go_count");
+            // These must all be present, even if empty
+            addCountFieldIfExists(doc, rs, "gene_count");
+            addCountFieldIfExists(doc, rs, "mp_count");
+            addCountFieldIfExists(doc, rs, "bp_count");
+            addCountFieldIfExists(doc, rs, "vt_count");
+            addCountFieldIfExists(doc, rs, "chebi_count");
+            addCountFieldIfExists(doc, rs, "rs_count");
+            addCountFieldIfExists(doc, rs, "rdo_count");
+            addCountFieldIfExists(doc, rs, "nbo_count");
+            addCountFieldIfExists(doc, rs, "xco_count");
+            addCountFieldIfExists(doc, rs, "so_count");
+            addCountFieldIfExists(doc, rs, "hp_count");
+            addCountFieldIfExists(doc, rs, "rgd_obj_count");
+            addCountFieldIfExists(doc, rs, "go_count");
+            addCountFieldIfExists(doc, rs, "zfa_count");
+            addCountFieldIfExists(doc, rs, "cmo_count");
+            addCountFieldIfExists(doc, rs, "ma_count");
+            addCountFieldIfExists(doc, rs, "pw_count");
+            addCountFieldIfExists(doc, rs, "organism_count");
 
             // Add source field
             doc.addField("p_source", "pubmed");
@@ -259,13 +280,43 @@ public class SimplePostgresToSolr {
     }
 
     /**
+     * Helper method to add count fields, ensuring all count fields are present even if empty
+     */
+    private void addCountFieldIfExists(SolrInputDocument doc, ResultSet rs, String fieldName) {
+        try {
+            String value = rs.getString(fieldName);
+            if (value != null && !value.trim().isEmpty()) {
+                // Parse count values as integer arrays to match OntoMate schema
+                String[] values = value.split(" \\| ");
+                for (String val : values) {
+                    val = val.trim();
+                    if (!val.isEmpty()) {
+                        try {
+                            doc.addField(fieldName, Integer.parseInt(val));
+                        } catch (NumberFormatException e) {
+                            System.err.println("Warning: Invalid count value '" + val + "' for field " + fieldName);
+                        }
+                    }
+                }
+            } else {
+                // QueryBuilder requires all count fields to be present, add zero as integer
+                doc.addField(fieldName, 0);
+            }
+        } catch (SQLException e) {
+            // Field doesn't exist in ResultSet, QueryBuilder may require all count fields
+            // Add zero count for missing fields as integer
+            doc.addField(fieldName, 0);
+        }
+    }
+
+    /**
      * Helper method to safely add fields from ResultSet to SolrInputDocument
      */
     private void addFieldIfExists(SolrInputDocument doc, ResultSet rs, String fieldName) {
         try {
             String value = rs.getString(fieldName);
             if (value != null && !value.trim().isEmpty()) {
-                // Special handling for count fields - convert to integers
+                // Special handling for count fields - keep as integer arrays to match OntoMate schema
                 if (fieldName.endsWith("_count")) {
                     String[] values = value.split(" \\| ");
                     for (String val : values) {
@@ -274,7 +325,6 @@ public class SimplePostgresToSolr {
                             try {
                                 doc.addField(fieldName, Integer.parseInt(val));
                             } catch (NumberFormatException e) {
-                                // Skip invalid numbers
                                 System.err.println("Warning: Invalid count value '" + val + "' for field " + fieldName);
                             }
                         }
@@ -289,11 +339,18 @@ public class SimplePostgresToSolr {
                     for (String val : values) {
                         val = val.trim();
                         if (!val.isEmpty()) {
+                            // Sanitize text fields
+                            if (isTextField(fieldName)) {
+                                val = sanitizeText(val);
+                            }
                             doc.addField(fieldName, val);
                         }
                     }
                 } else {
-                    // Single value field
+                    // Single value field - sanitize text fields
+                    if (isTextField(fieldName)) {
+                        value = sanitizeText(value);
+                    }
                     doc.addField(fieldName, value);
                 }
             }
@@ -480,6 +537,46 @@ public class SimplePostgresToSolr {
         }
         json.append("\n}");
         return json.toString();
+    }
+
+    /**
+     * Check if a field contains text that should be sanitized
+     */
+    private boolean isTextField(String fieldName) {
+        return fieldName.equals("authors") || fieldName.equals("keywords") ||
+               fieldName.equals("mesh_terms") || fieldName.equals("affiliation") ||
+               fieldName.equals("chemicals") || fieldName.equals("citation") ||
+               fieldName.endsWith("_term");
+    }
+
+    /**
+     * Sanitize text to remove characters that break Solr query parser
+     */
+    private String sanitizeText(String text) {
+        if (text == null) return null;
+
+        // Replace problematic question marks with proper Greek letters
+        // These appear to be encoding artifacts for Greek letters
+        text = text.replace("?-macroglobulin", "α-macroglobulin");
+        text = text.replace("?-2-macroglobulin", "α-2-macroglobulin");
+        text = text.replace("factor-?", "factor-β");
+        text = text.replace("TGF-?", "TGF-β");
+
+        // Replace HTML entities that might cause parsing issues
+        text = text.replace("&nbsp;", " ");
+        text = text.replace("&amp;", "&");
+        text = text.replace("&lt;", "<");
+        text = text.replace("&gt;", ">");
+        text = text.replace("&quot;", "\"");
+
+        // Fix common text extraction errors
+        text = text.replace("homologyepatocellular", "hepatocellular");
+
+        // Replace any remaining standalone question marks that might break parsing
+        // but preserve question marks that are clearly punctuation (end of sentences)
+        text = text.replaceAll("\\?(?![\\s.,;:]|$)", "");
+
+        return text;
     }
 
     public static void main(String[] args) throws Exception {
