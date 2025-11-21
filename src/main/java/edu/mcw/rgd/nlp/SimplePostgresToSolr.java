@@ -459,22 +459,11 @@ public class SimplePostgresToSolr {
                 return;
             }
 
-            System.out.println("Sending batch of " + documentBatch.size() + " documents to Solr...");
-
-            // Print JSON representation of documents
-            System.out.println("\n========== JSON BEING SENT TO SOLR ==========");
-            for (SolrInputDocument doc : documentBatch) {
-                System.out.println(documentToJson(doc));
-            }
-            System.out.println("========== END JSON ==========\n");
-
             solrServer.add(documentBatch);
             solrServer.commit();
 
             // Clear the batch
             documentBatch.clear();
-
-            System.out.println("Batch sent successfully to Solr");
 
         } catch (SolrServerException | IOException e) {
             System.err.println("Error sending batch to Solr: " + e.getMessage());
