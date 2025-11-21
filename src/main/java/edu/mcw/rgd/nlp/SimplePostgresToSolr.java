@@ -86,9 +86,6 @@ public class SimplePostgresToSolr {
 
             int count = 0;
             while (rs.next()) {
-                String pmid = rs.getString("pmid");
-                System.out.println(sdf.format(new Date()) + " processing " + pmid + " (" + (count + 1) + ")");
-
                 // Create Solr document from database record
                 SolrInputDocument doc = createSolrDocument(rs);
 
@@ -103,6 +100,11 @@ public class SimplePostgresToSolr {
                 }
 
                 count++;
+
+                // Progress logging every 1000 records
+                if (count % 1000 == 0) {
+                    System.out.println("Progress: " + count + " records processed");
+                }
             }
 
             // Send any remaining documents
@@ -380,10 +382,7 @@ public class SimplePostgresToSolr {
         countStmt.close();
 
         while (hasMore) {
-            String query = "SELECT * FROM solr_docs ORDER BY pmid LIMIT " + chunkSize + " OFFSET " + offset;
-            System.out.println("\nProcessing chunk: records " + (offset + 1) + " to " + (offset + chunkSize));
-            System.out.println("Progress: " + offset + " / " + totalRecords + " (" +
-                              String.format("%.1f", (offset * 100.0 / totalRecords)) + "%)");
+            String query = "SELECT * FROM solr_docs LIMIT " + chunkSize + " OFFSET " + offset;
 
             // Use cursor-based fetching
             conn.setAutoCommit(false);
@@ -393,11 +392,6 @@ public class SimplePostgresToSolr {
 
             int chunkCount = 0;
             while (rs.next()) {
-                String pmid = rs.getString("pmid");
-                if (chunkCount % 100 == 0) {
-                    System.out.println(sdf.format(new Date()) + " processing " + pmid + " (" + (totalProcessed + chunkCount + 1) + ")");
-                }
-
                 // Create Solr document from database record
                 try {
                     SolrInputDocument doc = createSolrDocument(rs);
@@ -413,7 +407,7 @@ public class SimplePostgresToSolr {
                     }
                 } catch (Exception e) {
                     // Log error but continue processing
-                    System.err.println("Skipping record due to error: " + e.getMessage());
+                    System.err.println("Error processing record: " + e.getMessage());
                 }
                 chunkCount++;
             }
@@ -429,11 +423,14 @@ public class SimplePostgresToSolr {
             totalProcessed += chunkCount;
             offset += chunkSize;
 
+            // Progress logging once per chunk
+            System.out.println("Progress: " + totalProcessed + " / " + totalRecords + " (" +
+                              String.format("%.1f", (totalProcessed * 100.0 / totalRecords)) + "%)");
+
             // Check if we have more records
             hasMore = chunkCount == chunkSize;
 
             if (hasMore) {
-                System.out.println("Chunk completed. Processed " + totalProcessed + " records so far...");
                 // Small delay between chunks to avoid overwhelming the database
                 try {
                     Thread.sleep(1000);
