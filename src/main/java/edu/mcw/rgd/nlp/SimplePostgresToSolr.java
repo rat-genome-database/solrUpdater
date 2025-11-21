@@ -557,6 +557,19 @@ public class SimplePostgresToSolr {
     private String sanitizeText(String text) {
         if (text == null) return null;
 
+        // Remove leading tabs (common in abstracts)
+        text = text.replaceAll("^\\t+", "");
+
+        // Replace all newlines and carriage returns with spaces
+        // This matches ai1 format which has no embedded newlines
+        text = text.replaceAll("[\\r\\n]+", " ");
+
+        // Collapse multiple spaces into single space
+        text = text.replaceAll("\\s+", " ");
+
+        // Remove trailing spaces
+        text = text.trim();
+
         // Replace problematic question marks with proper Greek letters
         // These appear to be encoding artifacts for Greek letters
         text = text.replace("?-macroglobulin", "α-macroglobulin");
