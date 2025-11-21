@@ -37,7 +37,12 @@ public class SimplePostgresToSolr {
 
             // Check if we should process in chunks
             if (dateFilter != null && dateFilter.toUpperCase().equals("CHUNKS")) {
-                processInChunks(conn, sdf);
+                processInChunks(conn, sdf, null);
+                return;
+            } else if (dateFilter != null && dateFilter.toUpperCase().startsWith("CHUNKS ")) {
+                // CHUNKS with filter: e.g., "CHUNKS 2025-01-01,2025-11-21"
+                String filter = dateFilter.substring(7).trim();
+                processInChunks(conn, sdf, filter);
                 return;
             }
 
@@ -364,17 +369,28 @@ public class SimplePostgresToSolr {
     /**
      * Process the entire database in chunks to avoid timeouts and memory issues
      */
-    private void processInChunks(Connection conn, SimpleDateFormat sdf) throws SQLException, SolrServerException, IOException {
+    private void processInChunks(Connection conn, SimpleDateFormat sdf, String dateFilter) throws SQLException, SolrServerException, IOException {
         int chunkSize = DatabaseConfig.getChunkSize();  // Process records in chunks
         int offset = 0;
         int totalProcessed = 0;
         boolean hasMore = true;
 
-        System.out.println("Processing entire database in chunks of " + chunkSize + " records...");
+        // Build WHERE clause if filter provided
+        String whereClause = "";
+        if (dateFilter != null && !dateFilter.isEmpty()) {
+            if (dateFilter.contains(",")) {
+                // Date range format: "2025-01-01,2025-11-21"
+                String[] dates = dateFilter.split(",");
+                whereClause = " WHERE p_date >= DATE '" + dates[0] + "' AND p_date < DATE '" + dates[1] + "'";
+                System.out.println("Processing records with date filter: " + dates[0] + " to " + dates[1]);
+            }
+        }
+
+        System.out.println("Processing database in chunks of " + chunkSize + " records...");
 
         // First get total count
         Statement countStmt = conn.createStatement();
-        ResultSet countRs = countStmt.executeQuery("SELECT COUNT(*) FROM solr_docs");
+        ResultSet countRs = countStmt.executeQuery("SELECT COUNT(*) FROM solr_docs" + whereClause);
         countRs.next();
         int totalRecords = countRs.getInt(1);
         System.out.println("Total records to process: " + totalRecords);
@@ -382,7 +398,7 @@ public class SimplePostgresToSolr {
         countStmt.close();
 
         while (hasMore) {
-            String query = "SELECT * FROM solr_docs LIMIT " + chunkSize + " OFFSET " + offset;
+            String query = "SELECT * FROM solr_docs" + whereClause + " LIMIT " + chunkSize + " OFFSET " + offset;
 
             // Use cursor-based fetching
             conn.setAutoCommit(false);
