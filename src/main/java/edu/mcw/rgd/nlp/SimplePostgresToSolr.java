@@ -212,6 +212,12 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "hp_id");
             addFieldIfExists(doc, rs, "xdb_id");
             addFieldIfExists(doc, rs, "rgd_obj_id");
+            addFieldIfExists(doc, rs, "zfa_id");
+            addFieldIfExists(doc, rs, "cmo_id");
+            addFieldIfExists(doc, rs, "ma_id");
+            addFieldIfExists(doc, rs, "pw_id");
+            addFieldIfExists(doc, rs, "mmo_id");
+            addFieldIfExists(doc, rs, "mt_id");
 
             // Add ontology term fields (terms)
             addFieldIfExists(doc, rs, "mp_term");
@@ -225,6 +231,11 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "so_term");
             addFieldIfExists(doc, rs, "hp_term");
             addFieldIfExists(doc, rs, "rgd_obj_term");
+            addFieldIfExists(doc, rs, "zfa_term");
+            addFieldIfExists(doc, rs, "cmo_term");
+            addFieldIfExists(doc, rs, "ma_term");
+            addFieldIfExists(doc, rs, "pw_term");
+            addFieldIfExists(doc, rs, "mmo_term");
 
             // Add position fields
             addFieldIfExists(doc, rs, "gene_pos");
@@ -240,6 +251,12 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "hp_pos");
             addFieldIfExists(doc, rs, "rgd_obj_pos");
             addFieldIfExists(doc, rs, "organism_pos");
+            addFieldIfExists(doc, rs, "zfa_pos");
+            addFieldIfExists(doc, rs, "cmo_pos");
+            addFieldIfExists(doc, rs, "ma_pos");
+            addFieldIfExists(doc, rs, "pw_pos");
+            addFieldIfExists(doc, rs, "mmo_pos");
+            addFieldIfExists(doc, rs, "mt_pos");
 
             // Add count fields (required for QueryBuilder interface)
             // These must all be present, even if empty
@@ -260,6 +277,8 @@ public class SimplePostgresToSolr {
             addCountFieldIfExists(doc, rs, "cmo_count");
             addCountFieldIfExists(doc, rs, "ma_count");
             addCountFieldIfExists(doc, rs, "pw_count");
+            addCountFieldIfExists(doc, rs, "mmo_count");
+            addCountFieldIfExists(doc, rs, "mt_count");
             addCountFieldIfExists(doc, rs, "organism_count");
 
             // Add source field

@@ -191,6 +191,8 @@ public class SingleRecordUpdater {
             addFieldIfExists(doc, rs, "cmo_id");
             addFieldIfExists(doc, rs, "ma_id");
             addFieldIfExists(doc, rs, "pw_id");
+            addFieldIfExists(doc, rs, "mmo_id");
+            addFieldIfExists(doc, rs, "mt_id");
 
             // Add GO fields (duplicates of BP for compatibility)
             addFieldIfExists(doc, rs, "go_id");
@@ -211,6 +213,7 @@ public class SingleRecordUpdater {
             addFieldIfExists(doc, rs, "cmo_term");
             addFieldIfExists(doc, rs, "ma_term");
             addFieldIfExists(doc, rs, "pw_term");
+            addFieldIfExists(doc, rs, "mmo_term");
 
             // Add GO terms (duplicates of BP for compatibility)
             addFieldIfExists(doc, rs, "go_term");
@@ -233,6 +236,8 @@ public class SingleRecordUpdater {
             addFieldIfExists(doc, rs, "cmo_pos");
             addFieldIfExists(doc, rs, "ma_pos");
             addFieldIfExists(doc, rs, "pw_pos");
+            addFieldIfExists(doc, rs, "mmo_pos");
+            addFieldIfExists(doc, rs, "mt_pos");
 
             // Add count fields (required for QueryBuilder interface)
             // These must all be present, even if empty
@@ -253,6 +258,8 @@ public class SingleRecordUpdater {
             addCountFieldIfExists(doc, rs, "cmo_count");
             addCountFieldIfExists(doc, rs, "ma_count");
             addCountFieldIfExists(doc, rs, "pw_count");
+            addCountFieldIfExists(doc, rs, "mmo_count");
+            addCountFieldIfExists(doc, rs, "mt_count");
             addCountFieldIfExists(doc, rs, "organism_count");
 
             // Add source field
