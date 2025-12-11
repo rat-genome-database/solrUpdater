@@ -219,7 +219,8 @@ public class SingleRecordUpdater {
             addFieldIfExists(doc, rs, "go_term");
 
             // Add position fields
-            addFieldIfExists(doc, rs, "gene_pos");
+            // Special handling for gene_pos to split into separate entries per gene
+            addGenePosField(doc, rs);
             addFieldIfExists(doc, rs, "mp_pos");
             addFieldIfExists(doc, rs, "bp_pos");
             addFieldIfExists(doc, rs, "vt_pos");
@@ -468,6 +469,30 @@ public class SingleRecordUpdater {
                         value = sanitizeText(value);
                     }
                     doc.addField(fieldName, value);
+                }
+            }
+        } catch (SQLException e) {
+            // Field doesn't exist in ResultSet, skip it
+        }
+    }
+
+    /**
+     * Special handler for gene_pos field to split positions into separate entries
+     * Each gene gets ONE position entry (not the combined string)
+     */
+    private void addGenePosField(SolrInputDocument doc, ResultSet rs) {
+        try {
+            String genePosValue = rs.getString("gene_pos");
+
+            if (genePosValue != null && !genePosValue.trim().isEmpty()) {
+                // Split positions by pipe (|) - each segment is one gene's position
+                String[] positions = genePosValue.split("\\|");
+
+                for (String pos : positions) {
+                    pos = pos.trim();
+                    if (!pos.isEmpty()) {
+                        doc.addField("gene_pos", pos);
+                    }
                 }
             }
         } catch (SQLException e) {
