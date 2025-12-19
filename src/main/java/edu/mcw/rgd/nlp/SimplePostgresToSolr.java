@@ -378,6 +378,10 @@ public class SimplePostgresToSolr {
                     if (isTextField(fieldName)) {
                         value = sanitizeText(value);
                     }
+                    // Truncate string fields (_s suffix) to Solr's max term length (32766 bytes)
+                    if (fieldName.endsWith("_s")) {
+                        value = truncateToMaxBytes(value, 32000); // Use 32000 to be safe
+                    }
                     doc.addField(fieldName, value);
                 }
             }
@@ -612,6 +616,35 @@ public class SimplePostgresToSolr {
         text = text.replaceAll("\\?(?![\\s.,;:]|$)", "");
 
         return text;
+    }
+
+    /**
+     * Truncate a string to a maximum number of UTF-8 bytes
+     * Solr has a limit of 32766 bytes for string fields
+     */
+    private String truncateToMaxBytes(String text, int maxBytes) {
+        if (text == null) {
+            return null;
+        }
+
+        byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (bytes.length <= maxBytes) {
+            return text;
+        }
+
+        // Truncate to maxBytes, being careful not to cut in the middle of a multi-byte character
+        int byteCount = 0;
+        int charCount = 0;
+        for (char c : text.toCharArray()) {
+            int charBytes = String.valueOf(c).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (byteCount + charBytes > maxBytes) {
+                break;
+            }
+            byteCount += charBytes;
+            charCount++;
+        }
+
+        return text.substring(0, charCount) + "...";
     }
 
     /**
