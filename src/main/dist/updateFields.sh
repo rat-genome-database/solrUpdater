@@ -7,11 +7,15 @@
 #   All records:    ./updateFields.sh --all <solr_host> <solr_core> <fields> [--limit N]
 #   By year:        ./updateFields.sh --year <year> <solr_host> <solr_core> <fields> [--limit N]
 #
+# Pass an empty string ("") for <solr_host> or <solr_core> to inherit the value
+# from database.properties (solr.default.url).
+#
 # Examples:
-#   ./updateFields.sh 39022130 dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count
-#   ./updateFields.sh --year 2024 dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count
-#   ./updateFields.sh --year 2024 dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count --limit 100
-#   ./updateFields.sh --all dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count --limit 1000
+#   ./updateFields.sh 39022130 garak.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count
+#   ./updateFields.sh 39022130 "" "" gene,gene_pos,gene_count   # host+core from properties
+#   ./updateFields.sh --year 2024 garak.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count
+#   ./updateFields.sh --year 2024 "" "" gene,gene_pos,gene_count --limit 100
+#   ./updateFields.sh --all "" "" gene,gene_pos,gene_count --limit 1000
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

@@ -23,7 +23,9 @@ public class FlexibleFieldUpdater {
     private Set<String> fieldsToUpdate;
 
     public FlexibleFieldUpdater(String solrHost, String solrCore, String fields) {
-        this.solrUrl = "http://" + solrHost + "/solr/" + solrCore;
+        String host = (solrHost == null || solrHost.isEmpty()) ? DatabaseConfig.getDefaultSolrHost() : solrHost;
+        String core = (solrCore == null || solrCore.isEmpty()) ? DatabaseConfig.getDefaultSolrCore() : solrCore;
+        this.solrUrl = "http://" + host + "/solr/" + core;
         this.solrServer = new HttpSolrServer(this.solrUrl);
         this.fieldsToUpdate = new HashSet<>(Arrays.asList(fields.split(",")));
     }
@@ -807,11 +809,14 @@ public class FlexibleFieldUpdater {
             System.err.println("  Single record:  FlexibleFieldUpdater <pmid> <solr_host> <solr_core> <fields>");
             System.err.println("  All records:    FlexibleFieldUpdater --all <solr_host> <solr_core> <fields> [--limit N]");
             System.err.println("  By year:        FlexibleFieldUpdater --year <year> <solr_host> <solr_core> <fields> [--limit N]");
+            System.err.println("\nPass an empty string (\"\") for <solr_host> or <solr_core> to inherit");
+            System.err.println("the value from database.properties (solr.default.url).");
             System.err.println("\nExamples:");
-            System.err.println("  FlexibleFieldUpdater 12345678 dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count");
-            System.err.println("  FlexibleFieldUpdater --year 2024 dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count");
-            System.err.println("  FlexibleFieldUpdater --year 2024 dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count --limit 100");
-            System.err.println("  FlexibleFieldUpdater --all dev.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count --limit 1000");
+            System.err.println("  FlexibleFieldUpdater 12345678 garak.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count");
+            System.err.println("  FlexibleFieldUpdater 12345678 \"\" \"\" gene,gene_pos,gene_count   # host+core from properties");
+            System.err.println("  FlexibleFieldUpdater --year 2024 garak.rgd.mcw.edu:8983 ai1 gene,gene_pos,gene_count");
+            System.err.println("  FlexibleFieldUpdater --year 2024 \"\" \"\" gene,gene_pos,gene_count --limit 100");
+            System.err.println("  FlexibleFieldUpdater --all \"\" \"\" gene,gene_pos,gene_count --limit 1000");
             System.err.println("\nCommon fields:");
             System.err.println("  Basic: title, abstract, p_date, p_year, authors, keywords");
             System.err.println("  Gene: gene, gene_pos, gene_count");

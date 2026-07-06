@@ -6,7 +6,8 @@
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <year> [solr_url]"
     echo "Example: $0 2020"
-    echo "Example: $0 2020 http://dev.rgd.mcw.edu:8983/solr/ai1"
+    echo "Example: $0 2020 http://garak.rgd.mcw.edu:8983/solr/ai1"
+    echo "(If solr_url is omitted, the value from database.properties is used.)"
     exit 1
 fi
 
@@ -17,7 +18,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CLASSPATH="$SCRIPT_DIR/lib/*"
 
 YEAR=$1
-SOLR_URL=${2:-"http://dev.rgd.mcw.edu:8983/solr/OntoMate"}
+SOLR_URL=${2:-""}
 
 # Validate year format (4 digits)
 if ! [[ "$YEAR" =~ ^[0-9]{4}$ ]]; then
@@ -32,7 +33,11 @@ END_DATE="$((YEAR + 1))-01-01"
 echo "Year Transfer to Solr"
 echo "Year: $YEAR"
 echo "Date Range: $START_DATE to $END_DATE (exclusive)"
-echo "Solr URL: $SOLR_URL"
+if [ -n "$SOLR_URL" ]; then
+    echo "Solr URL: $SOLR_URL"
+else
+    echo "Solr URL: (from database.properties)"
+fi
 echo ""
 
 # Run the main class with date range filter

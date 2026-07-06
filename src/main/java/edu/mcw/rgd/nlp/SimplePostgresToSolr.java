@@ -678,8 +678,8 @@ public class SimplePostgresToSolr {
             System.out.println("  args[" + i + "] = " + args[i]);
         }
 
-        String solrUrl = args.length > 0 ? args[0] : DatabaseConfig.getDefaultSolrUrl();
-        String dateFilter = args.length > 1 ? args[1] : null; // null means process all records
+        String solrUrl = (args.length > 0 && !args[0].isEmpty()) ? args[0] : DatabaseConfig.getDefaultSolrUrl();
+        String dateFilter = (args.length > 1 && !args[1].isEmpty()) ? args[1] : null; // null means process all records
 
         // Validate that solrUrl looks like a URL
         if (!solrUrl.startsWith("http")) {

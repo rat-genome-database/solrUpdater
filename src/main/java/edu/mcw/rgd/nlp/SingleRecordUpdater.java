@@ -595,7 +595,7 @@ public class SingleRecordUpdater {
         }
 
         String pmid = args[0];
-        String solrUrl = args.length > 1 ? args[1] : DatabaseConfig.getDefaultSolrUrl();
+        String solrUrl = (args.length > 1 && !args[1].isEmpty()) ? args[1] : DatabaseConfig.getDefaultSolrUrl();
 
         SingleRecordUpdater updater = new SingleRecordUpdater(solrUrl);
         updater.updateRecord(pmid);
