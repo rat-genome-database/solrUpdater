@@ -94,6 +94,9 @@ Examples:
 
 # Transfer single day
 ./scripts/runSimplePostgresToSolr.sh "http://dev.rgd.mcw.edu:8983/solr/ai1" "2020-01-01"
+
+# Transfer records updated after a specific date
+./scripts/runSimplePostgresToSolr.sh "http://dev.rgd.mcw.edu:8983/solr/ai1" "UPDATED_AFTER 2024-01-01"
 ```
 
 ### Transfer Single Year

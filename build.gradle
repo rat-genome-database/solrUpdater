@@ -92,3 +92,39 @@ task queryRecord(type: JavaExec) {
     }
 }
 
+// Custom task for flexible field updater
+task runFlexibleUpdater(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'edu.mcw.rgd.nlp.FlexibleFieldUpdater'
+    if (project.hasProperty('appArgs')) {
+        args project.appArgs.split(' ')
+    }
+}
+
+// Custom task for debugging abstract positions
+task runDebugAbstract(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'edu.mcw.rgd.nlp.DebugAbstract'
+    if (project.hasProperty('appArgs')) {
+        args project.appArgs.split(' ')
+    }
+}
+
+// Custom task for showing gene positions
+task runShowPositions(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'edu.mcw.rgd.nlp.ShowPositions'
+    if (project.hasProperty('appArgs')) {
+        args project.appArgs.split(' ')
+    }
+}
+
+// Custom task for printing abstract
+task runPrintAbstract(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = 'edu.mcw.rgd.nlp.PrintAbstract'
+    if (project.hasProperty('appArgs')) {
+        args project.appArgs.split(' ')
+    }
+}
+

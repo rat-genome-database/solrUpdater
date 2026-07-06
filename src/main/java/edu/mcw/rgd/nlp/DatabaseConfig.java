@@ -52,6 +52,24 @@ public class DatabaseConfig {
         return properties.getProperty("solr.default.url");
     }
 
+    public static String getDefaultSolrHost() {
+        String url = getDefaultSolrUrl();
+        if (url == null) return null;
+        String stripped = url.replaceFirst("^https?://", "");
+        int slash = stripped.indexOf('/');
+        return slash >= 0 ? stripped.substring(0, slash) : stripped;
+    }
+
+    public static String getDefaultSolrCore() {
+        String url = getDefaultSolrUrl();
+        if (url == null) return null;
+        int solrIdx = url.indexOf("/solr/");
+        if (solrIdx < 0) return null;
+        String core = url.substring(solrIdx + "/solr/".length());
+        int slash = core.indexOf('/');
+        return slash >= 0 ? core.substring(0, slash) : core;
+    }
+
     public static int getBatchSize() {
         return Integer.parseInt(properties.getProperty("solr.batch.size", "100"));
     }

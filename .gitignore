@@ -2,5 +2,5 @@
 .gradle/
 build/
 
-# Distribution files
-src/main/dist/
+# Database configuration (contains credentials)
+database.properties

@@ -37,13 +37,18 @@ public class SimplePostgresToSolr {
 
             // Check if we should process in chunks
             if (dateFilter != null && dateFilter.toUpperCase().equals("CHUNKS")) {
-                processInChunks(conn, sdf);
+                processInChunks(conn, sdf, null);
+                return;
+            } else if (dateFilter != null && dateFilter.toUpperCase().startsWith("CHUNKS ")) {
+                // CHUNKS with filter: e.g., "CHUNKS 2025-01-01,2025-11-21"
+                String filter = dateFilter.substring(7).trim();
+                processInChunks(conn, sdf, filter);
                 return;
             }
 
             String query;
             if (dateFilter != null && !dateFilter.isEmpty()) {
-                // Check if it's a date range (contains comma) or limit (starts with LIMIT)
+                // Check if it's a date range (contains comma), limit (starts with LIMIT), or updated_after filter
                 if (dateFilter.toUpperCase().startsWith("LIMIT")) {
                     // Parse the number from "LIMIT 100" format
                     String[] parts = dateFilter.split(" ");
@@ -53,6 +58,16 @@ public class SimplePostgresToSolr {
                         query = "SELECT * FROM solr_docs LIMIT 100";
                     }
                     System.out.println("Using custom limit: " + dateFilter);
+                } else if (dateFilter.toUpperCase().startsWith("UPDATED_AFTER")) {
+                    // Parse the date from "UPDATED_AFTER 2024-01-01" format
+                    String[] parts = dateFilter.split(" ");
+                    if (parts.length > 1) {
+                        String afterDate = parts[1];
+                        query = "SELECT * FROM solr_docs WHERE last_update_date > TIMESTAMP '" + afterDate + "'";
+                        System.out.println("Filtering by last_update_date after: " + afterDate);
+                    } else {
+                        throw new IllegalArgumentException("UPDATED_AFTER requires a date parameter (e.g., UPDATED_AFTER 2024-01-01)");
+                    }
                 } else if (dateFilter.contains(",")) {
                     // Date range format: "2016-10-01,2016-10-31"
                     String[] dates = dateFilter.split(",");
@@ -76,9 +91,6 @@ public class SimplePostgresToSolr {
 
             int count = 0;
             while (rs.next()) {
-                String pmid = rs.getString("pmid");
-                System.out.println(sdf.format(new Date()) + " processing " + pmid + " (" + (count + 1) + ")");
-
                 // Create Solr document from database record
                 SolrInputDocument doc = createSolrDocument(rs);
 
@@ -93,6 +105,11 @@ public class SimplePostgresToSolr {
                 }
 
                 count++;
+
+                // Progress logging every 1000 records
+                if (count % 1000 == 0) {
+                    System.out.println("Progress: " + count + " records processed");
+                }
             }
 
             // Send any remaining documents
@@ -127,13 +144,16 @@ public class SimplePostgresToSolr {
             }
 
             if (rs.getString("title") != null) {
-                doc.addField("title", rs.getString("title"));
+                String title = sanitizeText(rs.getString("title"));
+                doc.addField("title", title);
             }
 
             // Handle abstract field (could be CLOB or TEXT)
             try {
                 String abstractText = rs.getString("abstract");
                 if (abstractText != null && !abstractText.trim().isEmpty()) {
+                    // Sanitize problematic characters that break Solr query parser
+                    abstractText = sanitizeText(abstractText);
                     doc.addField("abstract", abstractText);
                 }
             } catch (SQLException e) {
@@ -142,6 +162,8 @@ public class SimplePostgresToSolr {
                     Clob abstractClob = rs.getClob("abstract");
                     if (abstractClob != null) {
                         String abstractText = abstractClob.getSubString(1, (int) abstractClob.length());
+                        // Sanitize problematic characters that break Solr query parser
+                        abstractText = sanitizeText(abstractText);
                         doc.addField("abstract", abstractText);
                     }
                 } catch (SQLException e2) {
@@ -190,6 +212,12 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "hp_id");
             addFieldIfExists(doc, rs, "xdb_id");
             addFieldIfExists(doc, rs, "rgd_obj_id");
+            addFieldIfExists(doc, rs, "zfa_id");
+            addFieldIfExists(doc, rs, "cmo_id");
+            addFieldIfExists(doc, rs, "ma_id");
+            addFieldIfExists(doc, rs, "pw_id");
+            addFieldIfExists(doc, rs, "mmo_id");
+            addFieldIfExists(doc, rs, "mt_id");
 
             // Add ontology term fields (terms)
             addFieldIfExists(doc, rs, "mp_term");
@@ -203,9 +231,15 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "so_term");
             addFieldIfExists(doc, rs, "hp_term");
             addFieldIfExists(doc, rs, "rgd_obj_term");
+            addFieldIfExists(doc, rs, "zfa_term");
+            addFieldIfExists(doc, rs, "cmo_term");
+            addFieldIfExists(doc, rs, "ma_term");
+            addFieldIfExists(doc, rs, "pw_term");
+            addFieldIfExists(doc, rs, "mmo_term");
 
             // Add position fields
-            addFieldIfExists(doc, rs, "gene_pos");
+            // Special handling for gene_pos to split into separate entries per gene
+            addGenePosField(doc, rs);
             addFieldIfExists(doc, rs, "mp_pos");
             addFieldIfExists(doc, rs, "bp_pos");
             addFieldIfExists(doc, rs, "vt_pos");
@@ -218,8 +252,35 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "hp_pos");
             addFieldIfExists(doc, rs, "rgd_obj_pos");
             addFieldIfExists(doc, rs, "organism_pos");
+            addFieldIfExists(doc, rs, "zfa_pos");
+            addFieldIfExists(doc, rs, "cmo_pos");
+            addFieldIfExists(doc, rs, "ma_pos");
+            addFieldIfExists(doc, rs, "pw_pos");
+            addFieldIfExists(doc, rs, "mmo_pos");
+            addFieldIfExists(doc, rs, "mt_pos");
 
-            // Note: *_count fields are not defined in Solr schema, skipping them
+            // Add count fields (required for QueryBuilder interface)
+            // These must all be present, even if empty
+            addCountFieldIfExists(doc, rs, "gene_count");
+            addCountFieldIfExists(doc, rs, "mp_count");
+            addCountFieldIfExists(doc, rs, "bp_count");
+            addCountFieldIfExists(doc, rs, "vt_count");
+            addCountFieldIfExists(doc, rs, "chebi_count");
+            addCountFieldIfExists(doc, rs, "rs_count");
+            addCountFieldIfExists(doc, rs, "rdo_count");
+            addCountFieldIfExists(doc, rs, "nbo_count");
+            addCountFieldIfExists(doc, rs, "xco_count");
+            addCountFieldIfExists(doc, rs, "so_count");
+            addCountFieldIfExists(doc, rs, "hp_count");
+            addCountFieldIfExists(doc, rs, "rgd_obj_count");
+            addCountFieldIfExists(doc, rs, "go_count");
+            addCountFieldIfExists(doc, rs, "zfa_count");
+            addCountFieldIfExists(doc, rs, "cmo_count");
+            addCountFieldIfExists(doc, rs, "ma_count");
+            addCountFieldIfExists(doc, rs, "pw_count");
+            addCountFieldIfExists(doc, rs, "mmo_count");
+            addCountFieldIfExists(doc, rs, "mt_count");
+            addCountFieldIfExists(doc, rs, "organism_count");
 
             // Add source field
             doc.addField("p_source", "pubmed");
@@ -246,26 +307,81 @@ public class SimplePostgresToSolr {
     }
 
     /**
+     * Helper method to add count fields, ensuring all count fields are present even if empty
+     */
+    private void addCountFieldIfExists(SolrInputDocument doc, ResultSet rs, String fieldName) {
+        try {
+            String value = rs.getString(fieldName);
+            if (value != null && !value.trim().isEmpty()) {
+                // Parse count values as integer arrays to match OntoMate schema
+                String[] values = value.split(" \\| ");
+                for (String val : values) {
+                    val = val.trim();
+                    if (!val.isEmpty()) {
+                        try {
+                            doc.addField(fieldName, Integer.parseInt(val));
+                        } catch (NumberFormatException e) {
+                            System.err.println("Warning: Invalid count value '" + val + "' for field " + fieldName);
+                        }
+                    }
+                }
+            } else {
+                // QueryBuilder requires all count fields to be present, add zero as integer
+                doc.addField(fieldName, 0);
+            }
+        } catch (SQLException e) {
+            // Field doesn't exist in ResultSet, QueryBuilder may require all count fields
+            // Add zero count for missing fields as integer
+            doc.addField(fieldName, 0);
+        }
+    }
+
+    /**
      * Helper method to safely add fields from ResultSet to SolrInputDocument
      */
     private void addFieldIfExists(SolrInputDocument doc, ResultSet rs, String fieldName) {
         try {
             String value = rs.getString(fieldName);
             if (value != null && !value.trim().isEmpty()) {
+                // Special handling for count fields - keep as integer arrays to match OntoMate schema
+                if (fieldName.endsWith("_count")) {
+                    String[] values = value.split(" \\| ");
+                    for (String val : values) {
+                        val = val.trim();
+                        if (!val.isEmpty()) {
+                            try {
+                                doc.addField(fieldName, Integer.parseInt(val));
+                            } catch (NumberFormatException e) {
+                                System.err.println("Warning: Invalid count value '" + val + "' for field " + fieldName);
+                            }
+                        }
+                    }
+                }
                 // Check if the field contains pipe-separated values
                 // These fields typically contain multiple values separated by " | "
-                if (fieldName.endsWith("_id") || fieldName.endsWith("_term") ||
+                else if (fieldName.endsWith("_id") || fieldName.endsWith("_term") ||
                     fieldName.endsWith("_pos") || fieldName.equals("gene")) {
                     // Split by pipe and add each value separately for multi-valued fields
                     String[] values = value.split(" \\| ");
                     for (String val : values) {
                         val = val.trim();
                         if (!val.isEmpty()) {
+                            // Sanitize text fields
+                            if (isTextField(fieldName)) {
+                                val = sanitizeText(val);
+                            }
                             doc.addField(fieldName, val);
                         }
                     }
                 } else {
-                    // Single value field
+                    // Single value field - sanitize text fields
+                    if (isTextField(fieldName)) {
+                        value = sanitizeText(value);
+                    }
+                    // Truncate string fields (_s suffix) to Solr's max term length (32766 bytes)
+                    if (fieldName.endsWith("_s")) {
+                        value = truncateToMaxBytes(value, 32000); // Use 32000 to be safe
+                    }
                     doc.addField(fieldName, value);
                 }
             }
@@ -277,17 +393,28 @@ public class SimplePostgresToSolr {
     /**
      * Process the entire database in chunks to avoid timeouts and memory issues
      */
-    private void processInChunks(Connection conn, SimpleDateFormat sdf) throws SQLException, SolrServerException, IOException {
+    private void processInChunks(Connection conn, SimpleDateFormat sdf, String dateFilter) throws SQLException, SolrServerException, IOException {
         int chunkSize = DatabaseConfig.getChunkSize();  // Process records in chunks
         int offset = 0;
         int totalProcessed = 0;
         boolean hasMore = true;
 
-        System.out.println("Processing entire database in chunks of " + chunkSize + " records...");
+        // Build WHERE clause if filter provided
+        String whereClause = "";
+        if (dateFilter != null && !dateFilter.isEmpty()) {
+            if (dateFilter.contains(",")) {
+                // Date range format: "2025-01-01,2025-11-21"
+                String[] dates = dateFilter.split(",");
+                whereClause = " WHERE p_date >= DATE '" + dates[0] + "' AND p_date < DATE '" + dates[1] + "'";
+                System.out.println("Processing records with date filter: " + dates[0] + " to " + dates[1]);
+            }
+        }
+
+        System.out.println("Processing database in chunks of " + chunkSize + " records...");
 
         // First get total count
         Statement countStmt = conn.createStatement();
-        ResultSet countRs = countStmt.executeQuery("SELECT COUNT(*) FROM solr_docs");
+        ResultSet countRs = countStmt.executeQuery("SELECT COUNT(*) FROM solr_docs" + whereClause);
         countRs.next();
         int totalRecords = countRs.getInt(1);
         System.out.println("Total records to process: " + totalRecords);
@@ -295,10 +422,7 @@ public class SimplePostgresToSolr {
         countStmt.close();
 
         while (hasMore) {
-            String query = "SELECT * FROM solr_docs ORDER BY pmid LIMIT " + chunkSize + " OFFSET " + offset;
-            System.out.println("\nProcessing chunk: records " + (offset + 1) + " to " + (offset + chunkSize));
-            System.out.println("Progress: " + offset + " / " + totalRecords + " (" +
-                              String.format("%.1f", (offset * 100.0 / totalRecords)) + "%)");
+            String query = "SELECT * FROM solr_docs" + whereClause + " LIMIT " + chunkSize + " OFFSET " + offset;
 
             // Use cursor-based fetching
             conn.setAutoCommit(false);
@@ -308,11 +432,6 @@ public class SimplePostgresToSolr {
 
             int chunkCount = 0;
             while (rs.next()) {
-                String pmid = rs.getString("pmid");
-                if (chunkCount % 100 == 0) {
-                    System.out.println(sdf.format(new Date()) + " processing " + pmid + " (" + (totalProcessed + chunkCount + 1) + ")");
-                }
-
                 // Create Solr document from database record
                 try {
                     SolrInputDocument doc = createSolrDocument(rs);
@@ -328,7 +447,7 @@ public class SimplePostgresToSolr {
                     }
                 } catch (Exception e) {
                     // Log error but continue processing
-                    System.err.println("Skipping record due to error: " + e.getMessage());
+                    System.err.println("Error processing record: " + e.getMessage());
                 }
                 chunkCount++;
             }
@@ -344,11 +463,14 @@ public class SimplePostgresToSolr {
             totalProcessed += chunkCount;
             offset += chunkSize;
 
+            // Progress logging once per chunk
+            System.out.println("Progress: " + totalProcessed + " / " + totalRecords + " (" +
+                              String.format("%.1f", (totalProcessed * 100.0 / totalRecords)) + "%)");
+
             // Check if we have more records
             hasMore = chunkCount == chunkSize;
 
             if (hasMore) {
-                System.out.println("Chunk completed. Processed " + totalProcessed + " records so far...");
                 // Small delay between chunks to avoid overwhelming the database
                 try {
                     Thread.sleep(1000);
@@ -377,22 +499,11 @@ public class SimplePostgresToSolr {
                 return;
             }
 
-            System.out.println("Sending batch of " + documentBatch.size() + " documents to Solr...");
-
-            // Print JSON representation of documents
-            System.out.println("\n========== JSON BEING SENT TO SOLR ==========");
-            for (SolrInputDocument doc : documentBatch) {
-                System.out.println(documentToJson(doc));
-            }
-            System.out.println("========== END JSON ==========\n");
-
             solrServer.add(documentBatch);
             solrServer.commit();
 
             // Clear the batch
             documentBatch.clear();
-
-            System.out.println("Batch sent successfully to Solr");
 
         } catch (SolrServerException | IOException e) {
             System.err.println("Error sending batch to Solr: " + e.getMessage());
@@ -454,6 +565,112 @@ public class SimplePostgresToSolr {
         return json.toString();
     }
 
+    /**
+     * Check if a field contains text that should be sanitized
+     */
+    private boolean isTextField(String fieldName) {
+        return fieldName.equals("authors") || fieldName.equals("keywords") ||
+               fieldName.equals("mesh_terms") || fieldName.equals("affiliation") ||
+               fieldName.equals("chemicals") || fieldName.equals("citation") ||
+               fieldName.endsWith("_term");
+    }
+
+    /**
+     * Sanitize text to remove characters that break Solr query parser
+     */
+    private String sanitizeText(String text) {
+        if (text == null) return null;
+
+        // Remove leading tabs (common in abstracts)
+        text = text.replaceAll("^\\t+", "");
+
+        // Replace all newlines and carriage returns with spaces
+        // This matches ai1 format which has no embedded newlines
+        text = text.replaceAll("[\\r\\n]+", " ");
+
+        // Collapse multiple spaces into single space
+        text = text.replaceAll("\\s+", " ");
+
+        // Remove trailing spaces
+        text = text.trim();
+
+        // Replace problematic question marks with proper Greek letters
+        // These appear to be encoding artifacts for Greek letters
+        text = text.replace("?-macroglobulin", "α-macroglobulin");
+        text = text.replace("?-2-macroglobulin", "α-2-macroglobulin");
+        text = text.replace("factor-?", "factor-β");
+        text = text.replace("TGF-?", "TGF-β");
+
+        // Replace HTML entities that might cause parsing issues
+        text = text.replace("&nbsp;", " ");
+        text = text.replace("&amp;", "&");
+        text = text.replace("&lt;", "<");
+        text = text.replace("&gt;", ">");
+        text = text.replace("&quot;", "\"");
+
+        // Fix common text extraction errors
+        text = text.replace("homologyepatocellular", "hepatocellular");
+
+        // Replace any remaining standalone question marks that might break parsing
+        // but preserve question marks that are clearly punctuation (end of sentences)
+        text = text.replaceAll("\\?(?![\\s.,;:]|$)", "");
+
+        return text;
+    }
+
+    /**
+     * Truncate a string to a maximum number of UTF-8 bytes
+     * Solr has a limit of 32766 bytes for string fields
+     */
+    private String truncateToMaxBytes(String text, int maxBytes) {
+        if (text == null) {
+            return null;
+        }
+
+        byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (bytes.length <= maxBytes) {
+            return text;
+        }
+
+        // Truncate to maxBytes, being careful not to cut in the middle of a multi-byte character
+        int byteCount = 0;
+        int charCount = 0;
+        for (char c : text.toCharArray()) {
+            int charBytes = String.valueOf(c).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (byteCount + charBytes > maxBytes) {
+                break;
+            }
+            byteCount += charBytes;
+            charCount++;
+        }
+
+        return text.substring(0, charCount) + "...";
+    }
+
+    /**
+     * Special handler for gene_pos field to split positions into separate entries
+     * Each gene gets ONE position entry (not the combined string)
+     */
+    private void addGenePosField(SolrInputDocument doc, ResultSet rs) {
+        try {
+            String genePosValue = rs.getString("gene_pos");
+
+            if (genePosValue != null && !genePosValue.trim().isEmpty()) {
+                // Split positions by pipe (|) - each segment is one gene's position
+                String[] positions = genePosValue.split("\\|");
+
+                for (String pos : positions) {
+                    pos = pos.trim();
+                    if (!pos.isEmpty()) {
+                        doc.addField("gene_pos", pos);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            // Field doesn't exist in ResultSet, skip it
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         // Debug: print all arguments
         System.out.println("Arguments received: " + args.length);
@@ -461,8 +678,8 @@ public class SimplePostgresToSolr {
             System.out.println("  args[" + i + "] = " + args[i]);
         }
 
-        String solrUrl = args.length > 0 ? args[0] : DatabaseConfig.getDefaultSolrUrl();
-        String dateFilter = args.length > 1 ? args[1] : null; // null means process all records
+        String solrUrl = (args.length > 0 && !args[0].isEmpty()) ? args[0] : DatabaseConfig.getDefaultSolrUrl();
+        String dateFilter = (args.length > 1 && !args[1].isEmpty()) ? args[1] : null; // null means process all records
 
         // Validate that solrUrl looks like a URL
         if (!solrUrl.startsWith("http")) {

@@ -13,6 +13,8 @@ db.maxConnections=10
 db.connectionTimeout=30000
 
 # Default Solr configuration
-solr.default.url=http://localhost:8983/solr/OntoMate
+# Production: http://garak.rgd.mcw.edu:8983/solr/ai1
+# Dev:        http://dev.rgd.mcw.edu:8983/solr/ai1
+solr.default.url=http://garak.rgd.mcw.edu:8983/solr/ai1
 solr.batch.size=100
 solr.chunk.size=10000
