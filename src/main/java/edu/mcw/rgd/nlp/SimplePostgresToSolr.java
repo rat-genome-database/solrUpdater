@@ -391,96 +391,96 @@ public class SimplePostgresToSolr {
     }
 
     /**
-     * Process the entire database in chunks to avoid timeouts and memory issues
+     * Process the entire database in chunks to avoid timeouts and memory issues.
+     * Uses keyset pagination on pmid so chunks don't skip or duplicate rows if
+     * PostgreSQL varies its scan order between queries.
      */
     private void processInChunks(Connection conn, SimpleDateFormat sdf, String dateFilter) throws SQLException, SolrServerException, IOException {
-        int chunkSize = DatabaseConfig.getChunkSize();  // Process records in chunks
-        int offset = 0;
+        int chunkSize = DatabaseConfig.getChunkSize();
         int totalProcessed = 0;
-        boolean hasMore = true;
+        Object lastPmid = null;
 
-        // Build WHERE clause if filter provided
-        String whereClause = "";
+        // Build optional date-range predicate
+        String dateWhere = "";
         if (dateFilter != null && !dateFilter.isEmpty()) {
             if (dateFilter.contains(",")) {
-                // Date range format: "2025-01-01,2025-11-21"
                 String[] dates = dateFilter.split(",");
-                whereClause = " WHERE p_date >= DATE '" + dates[0] + "' AND p_date < DATE '" + dates[1] + "'";
+                dateWhere = "p_date >= DATE '" + dates[0] + "' AND p_date < DATE '" + dates[1] + "'";
                 System.out.println("Processing records with date filter: " + dates[0] + " to " + dates[1]);
             }
         }
 
-        System.out.println("Processing database in chunks of " + chunkSize + " records...");
+        // pmid must be non-null: it's the keyset column and the Solr unique key
+        String baseWhere = "pmid IS NOT NULL" + (dateWhere.isEmpty() ? "" : " AND " + dateWhere);
 
-        // First get total count
+        System.out.println("Processing database in chunks of " + chunkSize + " records (keyset pagination on pmid)...");
+
         Statement countStmt = conn.createStatement();
-        ResultSet countRs = countStmt.executeQuery("SELECT COUNT(*) FROM solr_docs" + whereClause);
+        ResultSet countRs = countStmt.executeQuery("SELECT COUNT(*) FROM solr_docs WHERE " + baseWhere);
         countRs.next();
         int totalRecords = countRs.getInt(1);
         System.out.println("Total records to process: " + totalRecords);
         countRs.close();
         countStmt.close();
 
-        while (hasMore) {
-            String query = "SELECT * FROM solr_docs" + whereClause + " LIMIT " + chunkSize + " OFFSET " + offset;
+        conn.setAutoCommit(false);
 
-            // Use cursor-based fetching
-            conn.setAutoCommit(false);
-            Statement s = conn.createStatement();
-            s.setFetchSize(100);
-            ResultSet rs = s.executeQuery(query);
+        while (true) {
+            String where = baseWhere + (lastPmid == null ? "" : " AND pmid > ?");
+            String query = "SELECT * FROM solr_docs WHERE " + where + " ORDER BY pmid LIMIT " + chunkSize;
+
+            PreparedStatement ps = conn.prepareStatement(query);
+            ps.setFetchSize(100);
+            if (lastPmid != null) {
+                ps.setObject(1, lastPmid);
+            }
+            ResultSet rs = ps.executeQuery();
 
             int chunkCount = 0;
+            Object chunkLastPmid = null;
             while (rs.next()) {
-                // Create Solr document from database record
+                chunkLastPmid = rs.getObject("pmid");
                 try {
                     SolrInputDocument doc = createSolrDocument(rs);
 
                     if (doc != null) {
-                        // Add document to batch
                         documentBatch.add(doc);
 
-                        // Send batch if it reaches the size limit
                         if (documentBatch.size() >= BATCH_SIZE) {
                             sendBatchToSolr();
                         }
                     }
                 } catch (Exception e) {
-                    // Log error but continue processing
                     System.err.println("Error processing record: " + e.getMessage());
                 }
                 chunkCount++;
             }
 
             rs.close();
-            s.close();
+            ps.close();
 
-            // Send any remaining documents in this chunk
             if (!documentBatch.isEmpty()) {
                 sendBatchToSolr();
             }
 
             totalProcessed += chunkCount;
-            offset += chunkSize;
 
-            // Progress logging once per chunk
             System.out.println("Progress: " + totalProcessed + " / " + totalRecords + " (" +
                               String.format("%.1f", (totalProcessed * 100.0 / totalRecords)) + "%)");
 
-            // Check if we have more records
-            hasMore = chunkCount == chunkSize;
+            if (chunkCount < chunkSize) {
+                break;
+            }
 
-            if (hasMore) {
-                // Small delay between chunks to avoid overwhelming the database
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    // Ignore
-                }
+            lastPmid = chunkLastPmid;
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                // Ignore
             }
         }
 
-        // Final commit
         solrServer.commit();
         System.out.println("\n==============================================");
         System.out.println("Successfully transferred " + totalProcessed + " documents to Solr");
