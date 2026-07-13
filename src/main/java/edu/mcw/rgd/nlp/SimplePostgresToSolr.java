@@ -16,7 +16,14 @@ public class SimplePostgresToSolr {
     private String solrUrl;
     private SolrServer solrServer;
     private List<SolrInputDocument> documentBatch;
+    private int successfulDocs = 0;
+    private int failedDocs = 0;
+    // Solr StrField max term size is 32766 bytes; leave headroom for the "..." truncation suffix
+    private static final int MAX_STRING_BYTES = 32000;
     private static final int BATCH_SIZE = DatabaseConfig.getBatchSize();
+
+    public int getSuccessfulDocs() { return successfulDocs; }
+    public int getFailedDocs() { return failedDocs; }
 
     public SimplePostgresToSolr(String solrUrl) {
         this.solrUrl = solrUrl != null ? solrUrl : DatabaseConfig.getDefaultSolrUrl();
@@ -119,7 +126,10 @@ public class SimplePostgresToSolr {
 
             // Final commit
             solrServer.commit();
-            System.out.println("Successfully transferred " + count + " documents to Solr");
+            System.out.println("Transfer summary");
+            System.out.println("  Rows scanned:      " + count);
+            System.out.println("  Sent to Solr:      " + successfulDocs);
+            System.out.println("  Skipped on error:  " + failedDocs);
 
             conn.commit();  // Commit the transaction
             conn.close();
@@ -127,6 +137,8 @@ public class SimplePostgresToSolr {
         } catch (Exception e) {
             System.err.println("Error during transfer: " + e.getMessage());
             e.printStackTrace();
+            // Count this as a failure so main() exits non-zero
+            failedDocs++;
         }
     }
 
@@ -145,6 +157,7 @@ public class SimplePostgresToSolr {
 
             if (rs.getString("title") != null) {
                 String title = sanitizeText(rs.getString("title"));
+                title = truncateToMaxBytes(title, MAX_STRING_BYTES);
                 doc.addField("title", title);
             }
 
@@ -154,6 +167,7 @@ public class SimplePostgresToSolr {
                 if (abstractText != null && !abstractText.trim().isEmpty()) {
                     // Sanitize problematic characters that break Solr query parser
                     abstractText = sanitizeText(abstractText);
+                    abstractText = truncateToMaxBytes(abstractText, MAX_STRING_BYTES);
                     doc.addField("abstract", abstractText);
                 }
             } catch (SQLException e) {
@@ -164,6 +178,7 @@ public class SimplePostgresToSolr {
                         String abstractText = abstractClob.getSubString(1, (int) abstractClob.length());
                         // Sanitize problematic characters that break Solr query parser
                         abstractText = sanitizeText(abstractText);
+                        abstractText = truncateToMaxBytes(abstractText, MAX_STRING_BYTES);
                         doc.addField("abstract", abstractText);
                     }
                 } catch (SQLException e2) {
@@ -370,6 +385,7 @@ public class SimplePostgresToSolr {
                             if (isTextField(fieldName)) {
                                 val = sanitizeText(val);
                             }
+                            val = truncateToMaxBytes(val, MAX_STRING_BYTES);
                             doc.addField(fieldName, val);
                         }
                     }
@@ -378,10 +394,10 @@ public class SimplePostgresToSolr {
                     if (isTextField(fieldName)) {
                         value = sanitizeText(value);
                     }
-                    // Truncate string fields (_s suffix) to Solr's max term length (32766 bytes)
-                    if (fieldName.endsWith("_s")) {
-                        value = truncateToMaxBytes(value, 32000); // Use 32000 to be safe
-                    }
+                    // Cap every string value at Solr's per-term limit. Solr schemas often
+                    // copyField text columns into a StrField sibling (e.g. affiliation -> affiliation_s),
+                    // so we can't rely on the Java field name suffix to know whether truncation is needed.
+                    value = truncateToMaxBytes(value, MAX_STRING_BYTES);
                     doc.addField(fieldName, value);
                 }
             }
@@ -483,7 +499,10 @@ public class SimplePostgresToSolr {
 
         solrServer.commit();
         System.out.println("\n==============================================");
-        System.out.println("Successfully transferred " + totalProcessed + " documents to Solr");
+        System.out.println("Transfer summary (CHUNKS mode)");
+        System.out.println("  Rows scanned:      " + totalProcessed);
+        System.out.println("  Sent to Solr:      " + successfulDocs);
+        System.out.println("  Skipped on error:  " + failedDocs);
         System.out.println("==============================================");
 
         conn.commit();
@@ -491,23 +510,48 @@ public class SimplePostgresToSolr {
     }
 
     /**
-     * Sends the current batch of documents to Solr
+     * Sends the current batch of documents to Solr.
+     *
+     * On batch failure, retries each doc individually so a single poisoned
+     * record can be isolated, logged, and skipped instead of taking down the
+     * whole sync. The batch is always cleared before returning — otherwise the
+     * poisoned doc stays in memory and every subsequent send fails the same way.
      */
     private void sendBatchToSolr() {
-        try {
-            if (documentBatch.isEmpty()) {
-                return;
-            }
+        if (documentBatch.isEmpty()) {
+            return;
+        }
 
+        try {
             solrServer.add(documentBatch);
             solrServer.commit();
-
-            // Clear the batch
-            documentBatch.clear();
-
+            successfulDocs += documentBatch.size();
         } catch (SolrServerException | IOException e) {
-            System.err.println("Error sending batch to Solr: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("Batch send failed (" + documentBatch.size() + " docs): " + e.getMessage());
+            System.err.println("Retrying batch one document at a time to isolate the failure...");
+            List<SolrInputDocument> retry = new ArrayList<>(documentBatch);
+            int retrySuccess = 0;
+            int retryFail = 0;
+            for (SolrInputDocument doc : retry) {
+                try {
+                    solrServer.add(doc);
+                    retrySuccess++;
+                } catch (SolrServerException | IOException docE) {
+                    Object pmid = doc.getFieldValue("pmid");
+                    System.err.println("  SKIPPED pmid=" + pmid + ": " + docE.getMessage());
+                    retryFail++;
+                }
+            }
+            try {
+                solrServer.commit();
+            } catch (SolrServerException | IOException commitE) {
+                System.err.println("  Commit after per-doc retry failed: " + commitE.getMessage());
+            }
+            successfulDocs += retrySuccess;
+            failedDocs += retryFail;
+            System.err.println("Batch retry: " + retrySuccess + " succeeded, " + retryFail + " skipped");
+        } finally {
+            documentBatch.clear();
         }
     }
 
@@ -695,6 +739,10 @@ public class SimplePostgresToSolr {
         SimplePostgresToSolr loader = new SimplePostgresToSolr(solrUrl);
         loader.transferData(dateFilter);
 
+        if (loader.getFailedDocs() > 0) {
+            System.err.println("Transfer completed with " + loader.getFailedDocs() + " skipped document(s). See log above for pmids.");
+            System.exit(1);
+        }
         System.out.println("Transfer completed!");
     }
 }
