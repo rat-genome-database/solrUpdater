@@ -233,6 +233,10 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "pw_id");
             addFieldIfExists(doc, rs, "mmo_id");
             addFieldIfExists(doc, rs, "mt_id");
+            addFieldIfExists(doc, rs, "cl_id");
+            addFieldIfExists(doc, rs, "cc_id");
+            addFieldIfExists(doc, rs, "mf_id");
+            addFieldIfExists(doc, rs, "go_id");
 
             // Add ontology term fields (terms)
             addFieldIfExists(doc, rs, "mp_term");
@@ -251,6 +255,11 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "ma_term");
             addFieldIfExists(doc, rs, "pw_term");
             addFieldIfExists(doc, rs, "mmo_term");
+            addFieldIfExists(doc, rs, "mt_term");
+            addFieldIfExists(doc, rs, "cl_term");
+            addFieldIfExists(doc, rs, "cc_term");
+            addFieldIfExists(doc, rs, "mf_term");
+            addFieldIfExists(doc, rs, "go_term");
 
             // Add position fields
             // Special handling for gene_pos to split into separate entries per gene
@@ -273,6 +282,9 @@ public class SimplePostgresToSolr {
             addFieldIfExists(doc, rs, "pw_pos");
             addFieldIfExists(doc, rs, "mmo_pos");
             addFieldIfExists(doc, rs, "mt_pos");
+            addFieldIfExists(doc, rs, "cl_pos");
+            addFieldIfExists(doc, rs, "cc_pos");
+            addFieldIfExists(doc, rs, "mf_pos");
 
             // Add count fields (required for QueryBuilder interface)
             // These must all be present, even if empty
@@ -295,6 +307,9 @@ public class SimplePostgresToSolr {
             addCountFieldIfExists(doc, rs, "pw_count");
             addCountFieldIfExists(doc, rs, "mmo_count");
             addCountFieldIfExists(doc, rs, "mt_count");
+            addCountFieldIfExists(doc, rs, "cl_count");
+            addCountFieldIfExists(doc, rs, "cc_count");
+            addCountFieldIfExists(doc, rs, "mf_count");
             addCountFieldIfExists(doc, rs, "organism_count");
 
             // Add source field
